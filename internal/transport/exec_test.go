@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"os"
@@ -165,5 +166,68 @@ func TestFindCLINotFound(t *testing.T) {
 	_, err := FindCLI()
 	if !types.IsCLINotFoundError(err) {
 		t.Fatalf("expected CLINotFoundError, got %v", err)
+	}
+}
+
+func TestRunOversizedOutput(t *testing.T) {
+	ex, err := NewExec(fakeCodex(t), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, err := ex.Run(ctx, RunArgs{Input: "oversized"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		for range s.Lines() {
+		}
+		done <- s.Err()
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, bufio.ErrTooLong) {
+			t.Fatalf("error = %v, want scanner error", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("oversized output did not terminate the process")
+	}
+}
+
+func TestRunRelativeWorkingDirectory(t *testing.T) {
+	ex, err := NewExec(fakeCodex(t), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := t.TempDir()
+	child := filepath.Join(parent, "project")
+	if err := os.Mkdir(child, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(parent)
+	opts := types.NewThreadOptions().WithWorkingDirectory("project")
+	s, err := ex.Run(context.Background(), RunArgs{Input: "cwd", Thread: opts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := collect(t, s)
+	if err := s.Err(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := filepath.EvalSymlinks(lines[len(lines)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("cwd = %q, want %q", got, want)
+	}
+	if opts.WorkingDirectory != "project" {
+		t.Fatal("caller options mutated")
 	}
 }

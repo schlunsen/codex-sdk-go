@@ -31,13 +31,19 @@ type Turn struct {
 // errors so callers can tell a deliberate close from an upstream cancellation.
 var ErrClosed = errors.New("codex: streamed turn closed")
 
+// ErrIncompleteTurn means the process exited successfully without reporting
+// turn.completed or turn.failed.
+var ErrIncompleteTurn = errors.New("codex: stream ended without a terminal turn event")
+
 // StreamedTurn is the result of Thread.RunStreamed. Read events from Events
 // until it is closed, then call Err to learn how the turn ended.
 type StreamedTurn struct {
-	events <-chan types.ThreadEvent
-	done   chan struct{}
-	cancel context.CancelFunc
-	// turnEnded is set once turn.completed or turn.failed has been delivered,
+	events       <-chan types.ThreadEvent
+	done         chan struct{}
+	cancel       context.CancelFunc
+	stopDelivery chan struct{}
+	closeOnce    sync.Once
+	// turnEnded is set once turn.completed or turn.failed has been parsed,
 	// so Close can let codex finish persisting the session instead of killing it.
 	turnEnded atomic.Bool
 	err       error
@@ -50,7 +56,8 @@ func (s *StreamedTurn) Events() <-chan types.ThreadEvent { return s.events }
 
 // Err blocks until the stream has finished and returns the terminal error:
 // nil on success, *types.ExecError if codex exited non-zero, *types.ParseError
-// on malformed output, the context error on cancellation, or ErrClosed if
+// on malformed output, ErrIncompleteTurn on missing terminal events,
+// the context error on cancellation, or ErrClosed if
 // Close stopped the turn.
 func (s *StreamedTurn) Err() error {
 	<-s.done
@@ -70,9 +77,12 @@ func (s *StreamedTurn) Close() error {
 	if s.cancel == nil {
 		return fmt.Errorf("codex: Close on zero-value StreamedTurn")
 	}
-	if !s.turnEnded.Load() {
-		s.cancel()
-	}
+	s.closeOnce.Do(func() {
+		if !s.turnEnded.Load() {
+			s.cancel()
+		}
+		close(s.stopDelivery)
+	})
 	return s.Err()
 }
 
@@ -216,7 +226,7 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 	}
 
 	events := make(chan types.ThreadEvent, 64)
-	st := &StreamedTurn{events: events, done: make(chan struct{}), cancel: cancel}
+	st := &StreamedTurn{events: events, done: make(chan struct{}), cancel: cancel, stopDelivery: make(chan struct{})}
 
 	go func() {
 		defer close(st.done)
@@ -241,6 +251,9 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 			}
 			select {
 			case events <- ev:
+			case <-st.stopDelivery:
+				// Keep draining transport output so session persistence can
+				// finish, even when the consumer has stopped reading events.
 			case <-ctx.Done():
 				st.setErr(closedErr(parent, ctx.Err()))
 				_ = stream.Close()
@@ -252,6 +265,12 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		}
 		if err := stream.Err(); err != nil {
 			st.setErr(closedErr(parent, err))
+		} else if !st.turnEnded.Load() {
+			if ctx.Err() != nil {
+				st.setErr(closedErr(parent, ctx.Err()))
+			} else {
+				st.setErr(ErrIncompleteTurn)
+			}
 		}
 	}()
 

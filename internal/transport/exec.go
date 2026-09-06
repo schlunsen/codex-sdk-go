@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -107,6 +108,17 @@ func (s *Stream) setErr(err error) {
 
 // Run starts a codex exec process for args and returns a Stream of JSONL lines.
 func (e *Exec) Run(ctx context.Context, args RunArgs) (*Stream, error) {
+	if args.Thread != nil && args.Thread.WorkingDirectory != "" {
+		// Use the same absolute directory for both the child cwd and --cd.
+		// Copy options so resolving the path does not mutate caller state.
+		thread := *args.Thread
+		dir, err := filepath.Abs(thread.WorkingDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve working directory: %w", err)
+		}
+		thread.WorkingDirectory = dir
+		args.Thread = &thread
+	}
 	cmdArgs, err := BuildArgs(e.Config, e.ConfigOverrides, args)
 	if err != nil {
 		return nil, err
@@ -120,9 +132,7 @@ func (e *Exec) Run(ctx context.Context, args RunArgs) (*Stream, error) {
 	if args.Thread != nil && args.Thread.WorkingDirectory != "" {
 		// codex receives --cd, but also start the process there so relative
 		// paths in --image / --output-schema behave consistently.
-		if info, statErr := os.Stat(args.Thread.WorkingDirectory); statErr == nil && info.IsDir() {
-			cmd.Dir = args.Thread.WorkingDirectory
-		}
+		cmd.Dir = args.Thread.WorkingDirectory
 	}
 
 	stdin, err := cmd.StdinPipe()
@@ -203,6 +213,13 @@ func (e *Exec) pump(ctx context.Context, s *Stream, stdout io.ReadCloser, stderr
 	var scanErr error
 	select {
 	case scanErr = <-scanDone:
+		if scanErr != nil {
+			// A child can still be writing after scanning fails. Stop it
+			// before Wait, preserving the read error over cancellation.
+			s.setErr(fmt.Errorf("failed to read codex output: %w", scanErr))
+			s.cancel()
+			_ = stdout.Close()
+		}
 	case <-ctx.Done():
 		_ = stdout.Close()
 		<-scanDone
