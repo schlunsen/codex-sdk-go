@@ -137,8 +137,10 @@ func (e *Exec) Run(ctx context.Context, args RunArgs) (*Stream, error) {
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	// If the process is killed (context cancelled) bound how long Wait blocks
-	// on lingering pipe holders.
+	// Interrupt, then kill, the whole process group on cancellation (Unix);
+	// WaitDelay bounds how long Wait blocks on any pipe holder that survives
+	// regardless (e.g. a command codex started in its own process group).
+	configureProcessGroup(cmd)
 	cmd.WaitDelay = 2 * time.Second
 
 	e.Logger.Debugf("spawning %s %s", e.ExecutablePath, strings.Join(cmdArgs, " "))
@@ -208,7 +210,13 @@ func (e *Exec) pump(ctx context.Context, s *Stream, stdout io.ReadCloser, stderr
 	}
 	close(s.lines)
 
+	// Once cancelled, keep signalling the group until Wait has reaped codex:
+	// escalates to SIGKILL and catches a grandchild forked concurrently with
+	// the first signal (Unix; no-op elsewhere).
+	waited := make(chan struct{})
+	go superviseProcessGroup(ctx, s.cmd, waited)
 	waitErr := s.cmd.Wait()
+	close(waited)
 
 	// All output was read to EOF and the process exited 0: that is a
 	// successful run even if the context was cancelled in the meantime (e.g.

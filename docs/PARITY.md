@@ -51,9 +51,11 @@ its Go equivalent.
   `@openai/codex` npm package. This SDK checks `CODEX_PATH`, `PATH`, then
   common install locations (npm global, Homebrew, bun, cargo).
 - **`cache_write_input_tokens`** defaults to `0` when absent, matching the TS SDK.
-- **Process cleanup.** Cancelling the context kills the codex process and
-  unblocks readers even if grandchildren keep stdout open.
+- **Process cleanup.** Cancelling the context interrupts codex (Unix: `SIGINT`
+  to its process group so codex kills the shell command it is running, then
+  `SIGKILL` after a one-second grace) and unblocks readers even if something
+  keeps stdout open.
 - **Early close.** `StreamedTurn.Close` stops a streamed turn and reaps the
   process without cancelling the caller's context (or, once `turn.completed` /
-  `turn.failed` was delivered, waits for a clean exit). The TS SDK has only
-  `AbortSignal`.
+  `turn.failed` was delivered, waits for a clean exit) and reports
+  `codex.ErrClosed`. The TS SDK has only `AbortSignal`.

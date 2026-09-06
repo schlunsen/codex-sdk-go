@@ -11,6 +11,18 @@ adheres to [Semantic Versioning](https://semver.org/).
   caller's context: kills the codex process while the turn is in progress,
   or waits for a clean exit once `turn.completed` / `turn.failed` was delivered
 - `types.IsConfigError` helper, matching the other `Is*` error helpers
+- `codex.ErrClosed`, returned by `StreamedTurn.Err`/`Close` when `Close` stopped
+  an in-progress turn, so it is distinguishable from the caller's own context
+  being cancelled
+
+### Changed
+- On Unix, codex now runs in its own process group and cancellation sends
+  `SIGINT` to that group (codex aborts the turn and kills the shell command it
+  is running), escalating to `SIGKILL` after one second. Agent-spawned
+  commands no longer outlive a cancelled turn, and cancellation no longer
+  waits out `WaitDelay` on a pipe held by a grandchild.
+- `Thread.Run` returns the context error if the context was cancelled before
+  `turn.completed` arrived, even when codex exited cleanly.
 
 ## [0.1.0] - 2026-09-06
 
