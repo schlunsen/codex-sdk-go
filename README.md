@@ -267,6 +267,7 @@ go run ./examples/streaming "Run the tests and summarize what fails"
 
 ```bash
 make test-race   # unit tests against a fake codex binary (no network)
+make test-live   # smoke test against a real codex CLI (needs codex login or CODEX_API_KEY)
 make examples    # compile examples
 make lint        # go vet + golangci-lint
 make coverage    # HTML coverage report

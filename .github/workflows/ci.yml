@@ -9,16 +9,28 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch/PR supersedes the running build.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test (Go ${{ matrix.go }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         go: ["1.24", "1.25"]
     steps:
+      # Windows runners default to autocrlf=true, which would make gofmt
+      # flag every file. Must run before checkout.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
@@ -28,12 +40,20 @@ jobs:
           if [ -n "$(gofmt -l .)" ]; then gofmt -d .; exit 1; fi
       - name: Vet
         run: go vet ./...
-      - name: Test
+      - name: Test (race)
+        if: runner.os != 'Windows'
         run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+      # The race detector needs a C toolchain on Windows; the fake-CLI tests
+      # skip there anyway, so this mainly proves the Windows build path
+      # (exec_other.go) compiles and vets alongside the test files.
+      - name: Test
+        if: runner.os == 'Windows'
+        run: go test -count=1 ./...
       - name: Coverage summary
+        if: runner.os != 'Windows'
         run: go tool cover -func=coverage.out | tail -1
       - name: Build examples
-        run: make examples
+        run: go build ./examples/...
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.go == '1.25'
         uses: codecov/codecov-action@v4
@@ -63,4 +83,6 @@ jobs:
           go-version: "1.25"
       - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          # Pinned: a new linter release must not turn main red on its own.
+          # Dependabot does not track this field; bump deliberately.
+          version: v2.13.2
