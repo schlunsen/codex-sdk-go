@@ -4,7 +4,10 @@
 #   "fail"      -> emit turn.failed
 #   "crash"     -> exit 2 with stderr
 #   "garbage"   -> emit a non-JSON line
-#   "hang"      -> sleep forever after thread.started (for cancellation tests)
+#   "hang"      -> spawn `sleep 60` (pid written to $FAKE_PIDFILE) and wait;
+#                  on SIGINT kill it and exit 130, as codex does
+#   "hangint"   -> like hang, but SIGINT is ignored so only SIGKILL escalation
+#                  can stop it
 #   "streamerr" -> emit an "error" event then exit 1
 # Otherwise emits a successful turn whose agent_message echoes the args + prompt.
 prompt="$(cat)"
@@ -19,7 +22,10 @@ echo "{\"type\":\"thread.started\",\"thread_id\":\"$thread_id\"}"
 echo '{"type":"turn.started"}'
 
 case "$prompt" in
-  hang) sleep 60; exit 0 ;;
+  # Like codex: on SIGINT kill the running command and exit. (A background
+  # child of a non-interactive bash ignores SIGINT by itself, per POSIX.)
+  hang) trap '[ -n "$!" ] && kill -9 $! 2>/dev/null; exit 130' INT; sleep 60 & echo $! > "${FAKE_PIDFILE:-/dev/null}"; wait; exit 0 ;;
+  hangint) trap '' INT; sleep 60 & echo $! > "${FAKE_PIDFILE:-/dev/null}"; wait; exit 0 ;;
   crash) echo "boom" >&2; exit 2 ;;
   garbage) echo "this is not json"; exit 0 ;;
   streamerr) echo '{"type":"error","message":"stream broke"}'; exit 1 ;;

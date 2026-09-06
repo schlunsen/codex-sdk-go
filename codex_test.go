@@ -193,9 +193,9 @@ func startHang(t *testing.T, ctx context.Context) *StreamedTurn {
 	return st
 }
 
-// awaitCanceled drains st in the background and asserts it terminates with
-// context.Canceled within a bounded time.
-func awaitCanceled(t *testing.T, st *StreamedTurn, what string) {
+// awaitErr drains st in the background and asserts it terminates with want
+// within a bounded time.
+func awaitErr(t *testing.T, st *StreamedTurn, want error, what string) {
 	t.Helper()
 	done := make(chan error, 1)
 	go func() {
@@ -205,8 +205,8 @@ func awaitCanceled(t *testing.T, st *StreamedTurn, what string) {
 	}()
 	select {
 	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("%s: got %v, want context.Canceled", what, err)
+		if !errors.Is(err, want) {
+			t.Fatalf("%s: got %v, want %v", what, err, want)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("%s: stream did not stop", what)
@@ -217,16 +217,23 @@ func TestRunStreamedCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	st := startHang(t, ctx)
 	cancel()
-	awaitCanceled(t, st, "after ctx cancel")
+	awaitErr(t, st, context.Canceled, "after ctx cancel")
+	if err := st.Err(); errors.Is(err, ErrClosed) {
+		t.Fatalf("caller cancellation must not be reported as ErrClosed: %v", err)
+	}
 }
 
 func TestRunStreamedClose(t *testing.T) {
-	// The caller's context is never cancelled; Close alone must stop the turn.
+	// The caller's context is never cancelled; Close alone must stop the turn
+	// and the result must be distinguishable from a context cancellation.
 	st := startHang(t, context.Background())
 	go func() { _ = st.Close() }()
-	awaitCanceled(t, st, "after Close")
+	awaitErr(t, st, ErrClosed, "after Close")
+	if err := st.Err(); errors.Is(err, context.Canceled) {
+		t.Fatalf("Close must not be reported as context.Canceled: %v", err)
+	}
 	// Close is idempotent once the stream has terminated.
-	if err := st.Close(); !errors.Is(err, context.Canceled) {
+	if err := st.Close(); !errors.Is(err, ErrClosed) {
 		t.Fatalf("second Close returned %v", err)
 	}
 }

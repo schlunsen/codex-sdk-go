@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,11 @@ type Turn struct {
 	Usage *types.Usage
 }
 
+// ErrClosed is returned by StreamedTurn.Err and StreamedTurn.Close when Close
+// stopped a turn that was still in progress. It is distinct from the context
+// errors so callers can tell a deliberate close from an upstream cancellation.
+var ErrClosed = errors.New("codex: streamed turn closed")
+
 // StreamedTurn is the result of Thread.RunStreamed. Read events from Events
 // until it is closed, then call Err to learn how the turn ended.
 type StreamedTurn struct {
@@ -44,8 +50,8 @@ func (s *StreamedTurn) Events() <-chan types.ThreadEvent { return s.events }
 
 // Err blocks until the stream has finished and returns the terminal error:
 // nil on success, *types.ExecError if codex exited non-zero, *types.ParseError
-// on malformed output, the context error on cancellation, or context.Canceled
-// if Close stopped the turn.
+// on malformed output, the context error on cancellation, or ErrClosed if
+// Close stopped the turn.
 func (s *StreamedTurn) Err() error {
 	<-s.done
 	s.mu.Lock()
@@ -54,7 +60,8 @@ func (s *StreamedTurn) Err() error {
 }
 
 // Close releases the turn and waits for cleanup. If the turn is still in
-// progress the codex process is killed and Close returns context.Canceled.
+// progress the codex process (and, on Unix, its whole process group) is
+// killed and Close returns ErrClosed.
 // If turn.completed or turn.failed has already been delivered, codex is left
 // to exit on its own (so the session is persisted) and Close returns the
 // turn's terminal error, exactly like Err. Close is safe to call more than
@@ -156,6 +163,11 @@ func (t *Thread) RunInputs(ctx context.Context, inputs []types.UserInput, turnOp
 	if streamErr != nil {
 		return nil, &types.ThreadStreamError{Message: streamErr.Message}
 	}
+	if turn.Usage == nil && ctx.Err() != nil {
+		// No turn.completed arrived and the context is done: codex was
+		// interrupted, even if it happened to exit cleanly.
+		return nil, ctx.Err()
+	}
 	return turn, nil
 }
 
@@ -185,6 +197,7 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 	// the latter only closes stream.Lines(), which cannot unblock the
 	// `events <- ev` send below when the consumer has stopped reading. The
 	// deferred cancel also releases this child from a long-lived parent ctx.
+	parent := ctx
 	ctx, cancel := context.WithCancel(ctx)
 
 	stream, err := t.exec.Run(ctx, transport.RunArgs{
@@ -229,7 +242,7 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 			select {
 			case events <- ev:
 			case <-ctx.Done():
-				st.setErr(ctx.Err())
+				st.setErr(closedErr(parent, ctx.Err()))
 				_ = stream.Close()
 				return
 			}
@@ -238,11 +251,21 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		for range stream.Lines() {
 		}
 		if err := stream.Err(); err != nil {
-			st.setErr(err)
+			st.setErr(closedErr(parent, err))
 		}
 	}()
 
 	return st, nil
+}
+
+// closedErr maps a cancellation of the internal context to ErrClosed when the
+// caller's own context is still live, i.e. when Close (not the caller) stopped
+// the turn. Any other error is returned unchanged.
+func closedErr(parent context.Context, err error) error {
+	if errors.Is(err, context.Canceled) && parent.Err() == nil {
+		return ErrClosed
+	}
+	return err
 }
 
 func normalizeInputs(inputs []types.UserInput) (string, []string) {
