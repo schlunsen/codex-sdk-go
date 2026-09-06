@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-06
+
+### Fixed
+- `StreamedTurn.Close` no longer blocks when a terminal event is waiting behind
+  a full event buffer, and continues draining output during session persistence.
+- Oversized JSONL output terminates the child process and preserves the scanner
+  error instead of waiting indefinitely for a blocked writer.
+- Clean process exits without a terminal turn event return `ErrIncompleteTurn`
+  from both collected and streamed turns.
+- Relative working directories resolve once, avoiding applying the directory
+  twice through the process working directory and `--cd`.
+
 ## [0.1.1] - 2026-09-06
 
 ### Added
@@ -50,6 +62,7 @@ Initial release. Feature parity with `@openai/codex-sdk` (TypeScript).
 - Typed errors: `CLINotFoundError`, `ExecError`, `TurnFailedError`,
   `ThreadStreamError`, `ParseError`, `ConfigError`
 
-[Unreleased]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/schlunsen/codex-sdk-go/releases/tag/v0.1.0

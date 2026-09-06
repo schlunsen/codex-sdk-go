@@ -272,3 +272,57 @@ func TestVersion(t *testing.T) {
 		t.Fatal("Version is empty")
 	}
 }
+
+func TestRunIncompleteTurn(t *testing.T) {
+	for _, prompt := range []string{"empty", "incomplete"} {
+		t.Run(prompt, func(t *testing.T) {
+			c := newTestClient(t, nil)
+			if _, err := c.StartThread(nil).Run(context.Background(), prompt, nil); !errors.Is(err, ErrIncompleteTurn) {
+				t.Fatalf("Run error = %v, want ErrIncompleteTurn", err)
+			}
+			st, err := c.StartThread(nil).RunStreamed(context.Background(), prompt, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for range st.Events() {
+			}
+			if err := st.Err(); !errors.Is(err, ErrIncompleteTurn) {
+				t.Fatalf("stream error = %v", err)
+			}
+		})
+	}
+}
+
+func TestRunStreamedCloseFullBuffer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st, err := newTestClient(t, nil).StartThread(nil).RunStreamed(ctx, "fullbuffer", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for !st.turnEnded.Load() {
+		select {
+		case <-deadline.C:
+			t.Fatal("terminal event was not parsed")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	// The terminal event is waiting behind a full buffer; no consumer drains it.
+	done := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() { done <- st.Close() }()
+	}
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Close = %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Close blocked on event delivery")
+		}
+	}
+}

@@ -18,10 +18,29 @@ for a in "$@"; do
   prev="$a"
 done
 
+if [ "$prompt" = "empty" ]; then exit 0; fi
+
 echo "{\"type\":\"thread.started\",\"thread_id\":\"$thread_id\"}"
 echo '{"type":"turn.started"}'
 
 case "$prompt" in
+  incomplete) exit 0 ;;
+  fullbuffer)
+    for ((i=0; i<62; i++)); do echo '{"type":"turn.started"}'; done
+    echo '{"type":"turn.completed","usage":{}}'
+    # Output after completion must also drain when Close stops delivery.
+    for ((i=0; i<130; i++)); do echo '{"type":"future.event"}'; done
+    exit 0 ;;
+  oversized)
+    exec python3 -c 'import sys,time; sys.stdout.write("x" * (65 * 1024 * 1024)); sys.stdout.flush(); time.sleep(60)' ;;
+  cwd)
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = "--cd" ]; then shift; cd "$1" || exit 2; break; fi
+      shift
+    done
+    pwd
+    exit 0 ;;
+
   # Like codex: on SIGINT kill the running command and exit. (A background
   # child of a non-interactive bash ignores SIGINT by itself, per POSIX.)
   hang) trap '[ -n "$!" ] && kill -9 $! 2>/dev/null; exit 130' INT; sleep 60 & echo $! > "${FAKE_PIDFILE:-/dev/null}"; wait; exit 0 ;;
