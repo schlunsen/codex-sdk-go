@@ -24,9 +24,7 @@ go run ./examples/simple_run "What does this repo do?"
 make test-live   # build-tagged smoke tests in internal/livetest (costs tokens)
 ```
 
-The same live tests run in CI via the manual **Live** workflow
-(`Actions → Live → Run workflow`), which needs the `CODEX_API_KEY` repository
-secret. Regular CI never touches the network.
+CI never runs these; they are local-only and cost tokens.
 
 ## Guidelines
 
