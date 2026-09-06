@@ -1,0 +1,29 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - revive
+    - gosec
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    gosec:
+      excludes:
+        - G204 # subprocess launched with variable: spawning codex is the point of this SDK
+        - G304 # file inclusion via variable: schema/temp file paths are SDK-controlled
+
+formatters:
+  enable:
+    - gofmt

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Fake codex CLI for tests. Reads the prompt from stdin and emits JSONL events.
+# Behaviour is controlled by the prompt text:
+#   "fail"      -> emit turn.failed
+#   "crash"     -> exit 2 with stderr
+#   "garbage"   -> emit a non-JSON line
+#   "hang"      -> sleep forever after thread.started (for cancellation tests)
+#   "streamerr" -> emit an "error" event then exit 1
+# Otherwise emits a successful turn whose agent_message echoes the args + prompt.
+prompt="$(cat)"
+args="$*"
+thread_id="${FAKE_THREAD_ID:-thread_123}"
+for a in "$@"; do
+  if [ "$prev" = "resume" ]; then thread_id="$a"; fi
+  prev="$a"
+done
+
+echo "{\"type\":\"thread.started\",\"thread_id\":\"$thread_id\"}"
+echo '{"type":"turn.started"}'
+
+case "$prompt" in
+  hang) sleep 60; exit 0 ;;
+  crash) echo "boom" >&2; exit 2 ;;
+  garbage) echo "this is not json"; exit 0 ;;
+  streamerr) echo '{"type":"error","message":"stream broke"}'; exit 1 ;;
+  fail) echo '{"type":"turn.failed","error":{"message":"model refused"}}'; exit 0 ;;
+esac
+
+echo '{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"ls","aggregated_output":"","status":"in_progress"}}'
+echo '{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"ls","aggregated_output":"a\nb\n","exit_code":0,"status":"completed"}}'
+echo '{"type":"item.completed","item":{"id":"item_2","type":"reasoning","text":"thinking"}}'
+echo '{"type":"item.completed","item":{"id":"item_x","type":"future_item","payload":1}}'
+python3 - "$args" "$prompt" "${CODEX_INTERNAL_ORIGINATOR_OVERRIDE:-}" "${CODEX_API_KEY:-}" <<'PY'
+import json, sys
+args, prompt, orig, key = sys.argv[1:5]
+text = json.dumps({"args": args, "prompt": prompt, "originator": orig, "api_key": key})
+print(json.dumps({"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":text}}))
+PY
+echo '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":5,"reasoning_output_tokens":1}}'
