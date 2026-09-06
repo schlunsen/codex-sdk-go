@@ -206,6 +206,45 @@ func TestRunStreamedCancel(t *testing.T) {
 	}
 }
 
+func TestRunStreamedClose(t *testing.T) {
+	c := newTestClient(t, nil)
+	// The caller's context is never cancelled; Close alone must stop the turn.
+	st, err := c.StartThread(nil).RunStreamed(context.Background(), "hang", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-st.Events() // thread.started
+	done := make(chan error, 1)
+	go func() { done <- st.Close() }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Close returned %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not stop the stream")
+	}
+	// Events must be closed and Close must be idempotent.
+	for range st.Events() {
+	}
+	if err := st.Close(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("second Close returned %v", err)
+	}
+}
+
+func TestRunStreamedCloseAfterFinish(t *testing.T) {
+	c := newTestClient(t, nil)
+	st, err := c.StartThread(nil).RunStreamed(context.Background(), "hi", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range st.Events() {
+	}
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close after a successful turn returned %v, want nil", err)
+	}
+}
+
 func TestVersion(t *testing.T) {
 	if Version == "" {
 		t.Fatal("Version is empty")

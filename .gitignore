@@ -36,3 +36,6 @@ examples/*/app
 *.pprof
 .claude/
 .worktrees/
+
+# Local MCP server config (per-machine tooling, not part of the SDK)
+.mcp.json

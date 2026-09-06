@@ -104,6 +104,8 @@ if err := stream.Err(); err != nil { // nil on success; *types.ExecError, *types
 }
 ```
 
+To stop a turn early without cancelling your context, call `stream.Close()`. It kills the codex process, closes `Events()`, and returns `context.Canceled`; calling it after the turn has finished is a harmless no-op that returns the turn's final error.
+
 ### Structured output
 
 ```go
@@ -215,7 +217,7 @@ turn, err := thread.Run(ctx, prompt, nil)
 | `*types.ExecError` | codex exited non-zero; carries `ExitCode`, `Signal`, `Stderr` |
 | `*types.ThreadStreamError` | stream emitted a fatal `error` event but exited 0 |
 | `*types.ParseError` | a JSONL line couldn't be decoded |
-| `*types.ConfigError` | a config override couldn't be serialized |
+| `*types.ConfigError` | a config override couldn't be serialized (`types.IsConfigError`) |
 
 All support `errors.As`, and `Is*` helpers are provided.
 

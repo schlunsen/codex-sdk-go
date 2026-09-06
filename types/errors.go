@@ -120,3 +120,9 @@ func (e *ConfigError) Error() string {
 }
 
 func (e *ConfigError) Unwrap() error { return e.Err }
+
+// IsConfigError reports whether err is a ConfigError.
+func IsConfigError(err error) bool {
+	var target *ConfigError
+	return errors.As(err, &target)
+}

@@ -25,10 +25,12 @@ type Turn struct {
 }
 
 // StreamedTurn is the result of Thread.RunStreamed. Read events from Events
-// until it is closed, then call Err to learn how the turn ended.
+// until it is closed, then call Err to learn how the turn ended. To abandon a
+// turn early without cancelling the caller's context, call Close.
 type StreamedTurn struct {
 	events <-chan types.ThreadEvent
 	done   chan struct{}
+	cancel context.CancelFunc
 	err    error
 	mu     sync.Mutex
 }
@@ -45,6 +47,15 @@ func (s *StreamedTurn) Err() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.err
+}
+
+// Close abandons the turn: it kills the codex process if it is still running,
+// closes the Events channel, and waits for cleanup. It returns the terminal
+// error, which is context.Canceled when Close itself stopped the turn. Close
+// is safe to call more than once and after the turn has already finished.
+func (s *StreamedTurn) Close() error {
+	s.cancel()
+	return s.Err()
 }
 
 func (s *StreamedTurn) setErr(err error) {
@@ -159,6 +170,10 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		return nil, err
 	}
 
+	// Derive a context so StreamedTurn.Close can stop the turn independently
+	// of the caller's ctx.
+	ctx, cancel := context.WithCancel(ctx)
+
 	stream, err := t.exec.Run(ctx, transport.RunArgs{
 		Input:            prompt,
 		ThreadID:         t.ID(),
@@ -169,15 +184,17 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		Thread:           t.threadOptions,
 	})
 	if err != nil {
+		cancel()
 		cleanup()
 		return nil, err
 	}
 
 	events := make(chan types.ThreadEvent, 64)
-	st := &StreamedTurn{events: events, done: make(chan struct{})}
+	st := &StreamedTurn{events: events, done: make(chan struct{}), cancel: cancel}
 
 	go func() {
 		defer close(st.done)
+		defer cancel()
 		defer cleanup()
 		defer close(events)
 
