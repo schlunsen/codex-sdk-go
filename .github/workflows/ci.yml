@@ -81,7 +81,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
-      - uses: golangci/golangci-lint-action@v7
+      - uses: golangci/golangci-lint-action@v9
         with:
           # Pinned: a new linter release must not turn main red on its own.
           # Dependabot does not track this field; bump deliberately.
