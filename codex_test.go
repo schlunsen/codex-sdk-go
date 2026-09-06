@@ -181,15 +181,22 @@ func TestRunStreamedEvents(t *testing.T) {
 	}
 }
 
-func TestRunStreamedCancel(t *testing.T) {
-	c := newTestClient(t, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	st, err := c.StartThread(nil).RunStreamed(ctx, "hang", nil)
+// startHang starts a streamed turn against the fake CLI's "hang" prompt and
+// consumes the first event, leaving the process blocked with the stream open.
+func startHang(t *testing.T, ctx context.Context) *StreamedTurn {
+	t.Helper()
+	st, err := newTestClient(t, nil).StartThread(nil).RunStreamed(ctx, "hang", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	<-st.Events()
-	cancel()
+	<-st.Events() // thread.started
+	return st
+}
+
+// awaitCanceled drains st in the background and asserts it terminates with
+// context.Canceled within a bounded time.
+func awaitCanceled(t *testing.T, st *StreamedTurn, what string) {
+	t.Helper()
 	done := make(chan error, 1)
 	go func() {
 		for range st.Events() {
@@ -199,10 +206,57 @@ func TestRunStreamedCancel(t *testing.T) {
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("got %v", err)
+			t.Fatalf("%s: got %v, want context.Canceled", what, err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("stream did not stop after cancel")
+		t.Fatalf("%s: stream did not stop", what)
+	}
+}
+
+func TestRunStreamedCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	st := startHang(t, ctx)
+	cancel()
+	awaitCanceled(t, st, "after ctx cancel")
+}
+
+func TestRunStreamedClose(t *testing.T) {
+	// The caller's context is never cancelled; Close alone must stop the turn.
+	st := startHang(t, context.Background())
+	go func() { _ = st.Close() }()
+	awaitCanceled(t, st, "after Close")
+	// Close is idempotent once the stream has terminated.
+	if err := st.Close(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("second Close returned %v", err)
+	}
+}
+
+func TestRunStreamedCloseAfterTurnCompleted(t *testing.T) {
+	// A consumer that stops reading as soon as it sees turn.completed and
+	// calls Close must not have the process killed out from under it: the
+	// turn succeeded, so Close reports nil, same as Err.
+	c := newTestClient(t, nil)
+	st, err := c.StartThread(nil).RunStreamed(context.Background(), "hi", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ev := range st.Events() {
+		if _, ok := ev.(*types.TurnCompletedEvent); ok {
+			break
+		}
+	}
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close after turn.completed returned %v, want nil", err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatalf("second Close returned %v, want nil", err)
+	}
+}
+
+func TestStreamedTurnZeroValueClose(t *testing.T) {
+	var st StreamedTurn
+	if err := st.Close(); err == nil {
+		t.Fatal("Close on zero-value StreamedTurn should return an error, not panic or block")
 	}
 }
 

@@ -33,4 +33,7 @@ func TestErrorHelpers(t *testing.T) {
 	if !strings.Contains(ce.Error(), "a.b") || !errors.Is(ce, ce.Err) {
 		t.Error("ConfigError")
 	}
+	if !IsConfigError(fmt.Errorf("ctx: %w", ce)) || IsConfigError(errors.New("x")) {
+		t.Error("IsConfigError")
+	}
 }

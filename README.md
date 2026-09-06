@@ -104,6 +104,8 @@ if err := stream.Err(); err != nil { // nil on success; *types.ExecError, *types
 }
 ```
 
+To stop a turn early without cancelling your context, call `stream.Close()`. While the turn is in progress it kills the codex process, closes `Events()`, and returns `context.Canceled`. Once `turn.completed` or `turn.failed` has been delivered, `Close` no longer kills anything — codex is left to exit and persist the session — and it returns the same error `Err()` would, so `defer stream.Close()` is always safe.
+
 ### Structured output
 
 ```go

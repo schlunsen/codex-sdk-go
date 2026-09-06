@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/schlunsen/codex-sdk-go/internal/transport"
 	"github.com/schlunsen/codex-sdk-go/types"
@@ -29,22 +30,43 @@ type Turn struct {
 type StreamedTurn struct {
 	events <-chan types.ThreadEvent
 	done   chan struct{}
-	err    error
-	mu     sync.Mutex
+	cancel context.CancelFunc
+	// turnEnded is set once turn.completed or turn.failed has been delivered,
+	// so Close can let codex finish persisting the session instead of killing it.
+	turnEnded atomic.Bool
+	err       error
+	mu        sync.Mutex
 }
 
 // Events yields thread events as they are produced. It is closed when the
-// turn ends, the process exits, or the context is cancelled.
+// turn ends, the process exits, the context is cancelled, or Close is called.
 func (s *StreamedTurn) Events() <-chan types.ThreadEvent { return s.events }
 
 // Err blocks until the stream has finished and returns the terminal error:
 // nil on success, *types.ExecError if codex exited non-zero, *types.ParseError
-// on malformed output, or the context error on cancellation.
+// on malformed output, the context error on cancellation, or context.Canceled
+// if Close stopped the turn.
 func (s *StreamedTurn) Err() error {
 	<-s.done
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.err
+}
+
+// Close releases the turn and waits for cleanup. If the turn is still in
+// progress the codex process is killed and Close returns context.Canceled.
+// If turn.completed or turn.failed has already been delivered, codex is left
+// to exit on its own (so the session is persisted) and Close returns the
+// turn's terminal error, exactly like Err. Close is safe to call more than
+// once and from a goroutine other than the one reading Events.
+func (s *StreamedTurn) Close() error {
+	if s.cancel == nil {
+		return fmt.Errorf("codex: Close on zero-value StreamedTurn")
+	}
+	if !s.turnEnded.Load() {
+		s.cancel()
+	}
+	return s.Err()
 }
 
 func (s *StreamedTurn) setErr(err error) {
@@ -159,6 +181,12 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		return nil, err
 	}
 
+	// Own a cancel here rather than delegating Close to transport.Stream.Close:
+	// the latter only closes stream.Lines(), which cannot unblock the
+	// `events <- ev` send below when the consumer has stopped reading. The
+	// deferred cancel also releases this child from a long-lived parent ctx.
+	ctx, cancel := context.WithCancel(ctx)
+
 	stream, err := t.exec.Run(ctx, transport.RunArgs{
 		Input:            prompt,
 		ThreadID:         t.ID(),
@@ -169,15 +197,17 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		Thread:           t.threadOptions,
 	})
 	if err != nil {
+		cancel()
 		cleanup()
 		return nil, err
 	}
 
 	events := make(chan types.ThreadEvent, 64)
-	st := &StreamedTurn{events: events, done: make(chan struct{})}
+	st := &StreamedTurn{events: events, done: make(chan struct{}), cancel: cancel}
 
 	go func() {
 		defer close(st.done)
+		defer cancel()
 		defer cleanup()
 		defer close(events)
 
@@ -191,6 +221,10 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 			switch e := ev.(type) {
 			case *types.ThreadStartedEvent:
 				t.setID(e.ThreadID)
+			case *types.TurnCompletedEvent, *types.TurnFailedEvent:
+				// Mark before delivering so a consumer that calls Close as
+				// soon as it sees this event never races the flag.
+				st.turnEnded.Store(true)
 			}
 			select {
 			case events <- ev:

@@ -9,7 +9,7 @@ its Go equivalent.
 | `codex.startThread(opts)` | `client.StartThread(opts)` |
 | `codex.resumeThread(id, opts)` | `client.ResumeThread(id, opts)` |
 | `thread.run(input, turnOpts)` | `thread.Run(ctx, prompt, turnOpts)` / `thread.RunInputs(ctx, inputs, turnOpts)` |
-| `thread.runStreamed(input)` → `{ events }` | `thread.RunStreamed(ctx, prompt, nil)` → `*StreamedTurn` (`Events()`, `Err()`) |
+| `thread.runStreamed(input)` → `{ events }` | `thread.RunStreamed(ctx, prompt, nil)` → `*StreamedTurn` (`Events()`, `Err()`, `Close()`) |
 | `thread.id` | `thread.ID()` |
 | `Turn { items, finalResponse, usage }` | `codex.Turn { Items, FinalResponse, Usage }` |
 | `Input = string \| UserInput[]` | `string` for `Run`, `[]types.UserInput` for `RunInputs` |
@@ -53,3 +53,7 @@ its Go equivalent.
 - **`cache_write_input_tokens`** defaults to `0` when absent, matching the TS SDK.
 - **Process cleanup.** Cancelling the context kills the codex process and
   unblocks readers even if grandchildren keep stdout open.
+- **Early close.** `StreamedTurn.Close` stops a streamed turn and reaps the
+  process without cancelling the caller's context (or, once `turn.completed` /
+  `turn.failed` was delivered, waits for a clean exit). The TS SDK has only
+  `AbortSignal`.

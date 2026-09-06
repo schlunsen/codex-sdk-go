@@ -210,6 +210,12 @@ func (e *Exec) pump(ctx context.Context, s *Stream, stdout io.ReadCloser, stderr
 
 	waitErr := s.cmd.Wait()
 
+	// All output was read to EOF and the process exited 0: that is a
+	// successful run even if the context was cancelled in the meantime (e.g.
+	// a caller closing the stream right after the final event).
+	if scanErr == nil && waitErr == nil {
+		return
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		s.setErr(ctxErr)
 		return
