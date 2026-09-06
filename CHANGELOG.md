@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-06
+
 ### Added
 - `StreamedTurn.Close` to release a streamed turn without cancelling the
   caller's context: kills the codex process while the turn is in progress,
@@ -48,5 +50,6 @@ Initial release. Feature parity with `@openai/codex-sdk` (TypeScript).
 - Typed errors: `CLINotFoundError`, `ExecError`, `TurnFailedError`,
   `ThreadStreamError`, `ParseError`, `ConfigError`
 
-[Unreleased]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/schlunsen/codex-sdk-go/releases/tag/v0.1.0
