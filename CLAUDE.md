@@ -13,7 +13,7 @@ types/                    Public types: events, items, options, errors
 internal/config/          Flatten config map -> `--config key=value` TOML literals
 internal/transport/       CLI discovery, arg building, subprocess + JSONL streaming
 internal/transport/testdata/fake-codex   Fake CLI used by tests (bash + python3)
-internal/livetest/        Build-tagged (`live`) tests against a real codex; run by the manual Live workflow
+internal/livetest/        Build-tagged (`live`) tests against a real codex; local-only, never in CI
 examples/                 Runnable examples (need a real codex CLI)
 docs/PARITY.md            Feature map vs the TypeScript SDK
 ```
