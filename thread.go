@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/schlunsen/codex-sdk-go/internal/transport"
 	"github.com/schlunsen/codex-sdk-go/types"
@@ -25,23 +26,26 @@ type Turn struct {
 }
 
 // StreamedTurn is the result of Thread.RunStreamed. Read events from Events
-// until it is closed, then call Err to learn how the turn ended. To abandon a
-// turn early without cancelling the caller's context, call Close.
+// until it is closed, then call Err to learn how the turn ended.
 type StreamedTurn struct {
 	events <-chan types.ThreadEvent
 	done   chan struct{}
 	cancel context.CancelFunc
-	err    error
-	mu     sync.Mutex
+	// turnEnded is set once turn.completed or turn.failed has been delivered,
+	// so Close can let codex finish persisting the session instead of killing it.
+	turnEnded atomic.Bool
+	err       error
+	mu        sync.Mutex
 }
 
 // Events yields thread events as they are produced. It is closed when the
-// turn ends, the process exits, or the context is cancelled.
+// turn ends, the process exits, the context is cancelled, or Close is called.
 func (s *StreamedTurn) Events() <-chan types.ThreadEvent { return s.events }
 
 // Err blocks until the stream has finished and returns the terminal error:
 // nil on success, *types.ExecError if codex exited non-zero, *types.ParseError
-// on malformed output, or the context error on cancellation.
+// on malformed output, the context error on cancellation, or context.Canceled
+// if Close stopped the turn.
 func (s *StreamedTurn) Err() error {
 	<-s.done
 	s.mu.Lock()
@@ -49,12 +53,19 @@ func (s *StreamedTurn) Err() error {
 	return s.err
 }
 
-// Close abandons the turn: it kills the codex process if it is still running,
-// closes the Events channel, and waits for cleanup. It returns the terminal
-// error, which is context.Canceled when Close itself stopped the turn. Close
-// is safe to call more than once and after the turn has already finished.
+// Close releases the turn and waits for cleanup. If the turn is still in
+// progress the codex process is killed and Close returns context.Canceled.
+// If turn.completed or turn.failed has already been delivered, codex is left
+// to exit on its own (so the session is persisted) and Close returns the
+// turn's terminal error, exactly like Err. Close is safe to call more than
+// once and from a goroutine other than the one reading Events.
 func (s *StreamedTurn) Close() error {
-	s.cancel()
+	if s.cancel == nil {
+		return fmt.Errorf("codex: Close on zero-value StreamedTurn")
+	}
+	if !s.turnEnded.Load() {
+		s.cancel()
+	}
 	return s.Err()
 }
 
@@ -170,8 +181,10 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 		return nil, err
 	}
 
-	// Derive a context so StreamedTurn.Close can stop the turn independently
-	// of the caller's ctx.
+	// Own a cancel here rather than delegating Close to transport.Stream.Close:
+	// the latter only closes stream.Lines(), which cannot unblock the
+	// `events <- ev` send below when the consumer has stopped reading. The
+	// deferred cancel also releases this child from a long-lived parent ctx.
 	ctx, cancel := context.WithCancel(ctx)
 
 	stream, err := t.exec.Run(ctx, transport.RunArgs{
@@ -208,6 +221,10 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 			switch e := ev.(type) {
 			case *types.ThreadStartedEvent:
 				t.setID(e.ThreadID)
+			case *types.TurnCompletedEvent, *types.TurnFailedEvent:
+				// Mark before delivering so a consumer that calls Close as
+				// soon as it sees this event never races the flag.
+				st.turnEnded.Store(true)
 			}
 			select {
 			case events <- ev:

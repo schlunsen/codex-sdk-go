@@ -7,8 +7,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `StreamedTurn.Close` to abandon a streamed turn (kill the codex process and
-  close the event channel) without cancelling the caller's context
+- `StreamedTurn.Close` to release a streamed turn without cancelling the
+  caller's context: kills the codex process while the turn is in progress,
+  or waits for a clean exit once `turn.completed` / `turn.failed` was delivered
 - `types.IsConfigError` helper, matching the other `Is*` error helpers
 
 ## [0.1.0] - 2026-09-06
