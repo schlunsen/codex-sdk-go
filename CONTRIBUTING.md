@@ -21,7 +21,12 @@ To exercise the real CLI, install it (`npm install -g @openai/codex`), log in
 
 ```bash
 go run ./examples/simple_run "What does this repo do?"
+make test-live   # build-tagged smoke tests in internal/livetest (costs tokens)
 ```
+
+The same live tests run in CI via the manual **Live** workflow
+(`Actions → Live → Run workflow`), which needs the `CODEX_API_KEY` repository
+secret. Regular CI never touches the network.
 
 ## Guidelines
 
@@ -40,6 +45,7 @@ go run ./examples/simple_run "What does this repo do?"
 ## Releasing
 
 1. Update `VERSION` and move the "Unreleased" section in `CHANGELOG.md` to the new version.
-2. Commit, then tag: `git tag v0.x.y && git push origin main v0.x.y`.
+2. Open a PR (`main` is protected: PR + green CI required), merge it, then tag
+   the merge commit: `git tag v0.x.y && git push origin v0.x.y`.
 3. The release workflow verifies the tag matches `VERSION`, runs tests, and
    publishes a GitHub release with the changelog section.

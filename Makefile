@@ -1,4 +1,4 @@
-.PHONY: help build test test-race fmt fmt-check vet lint coverage examples clean
+.PHONY: help build test test-race test-live fmt fmt-check vet lint coverage examples clean
 
 help:
 	@echo "Codex SDK for Go - development tasks"
@@ -6,6 +6,7 @@ help:
 	@echo "  make build      - Compile all packages"
 	@echo "  make test       - Run unit tests"
 	@echo "  make test-race  - Run unit tests with the race detector"
+	@echo "  make test-live  - Smoke test against a real codex CLI (needs codex login or CODEX_API_KEY)"
 	@echo "  make fmt        - gofmt all sources"
 	@echo "  make fmt-check  - Fail if any file is not gofmt'd"
 	@echo "  make vet        - go vet"
@@ -22,6 +23,9 @@ test:
 
 test-race:
 	go test -race -count=1 ./...
+
+test-live:
+	go test -tags live -count=1 -v ./internal/livetest/
 
 fmt:
 	gofmt -w .
