@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-03
+
+### Added
+- Typed `CollabToolCallItem` (`collab_tool_call`) with `CollabTool`,
+  `CollabToolCallStatus` and `CollabAgentStatus`, matching newer codex CLI output.
+
 ## [0.1.2] - 2026-09-06
 
 ### Fixed

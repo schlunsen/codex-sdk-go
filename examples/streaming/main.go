@@ -82,6 +82,8 @@ func printItem(prefix string, item types.ThreadItem) {
 		}
 	case *types.McpToolCallItem:
 		fmt.Printf("%s mcp %s/%s [%s]\n", prefix, it.Server, it.Tool, it.Status)
+	case *types.CollabToolCallItem:
+		fmt.Printf("%s collab %s -> %v [%s]\n", prefix, it.Tool, it.ReceiverThreadIDs, it.Status)
 	case *types.WebSearchItem:
 		fmt.Printf("%s search: %s\n", prefix, it.Query)
 	case *types.TodoListItem:
