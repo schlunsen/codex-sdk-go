@@ -241,6 +241,7 @@ Events implement `types.ThreadEvent`; items implement `types.ThreadItem`. Unknow
 | `command_execution` | `Command`, `AggregatedOutput`, `ExitCode`, `Status` |
 | `file_change` | `Changes[]{Path, Kind}`, `Status` |
 | `mcp_tool_call` | `Server`, `Tool`, `Arguments`, `Result`, `Error`, `Status` |
+| `collab_tool_call` | `Tool`, `SenderThreadID`, `ReceiverThreadIDs`, `Prompt`, `AgentsStates`, `Status` |
 | `web_search` | `Query` |
 | `todo_list` | `Items[]{Text, Completed}` |
 | `error` | `Message` |

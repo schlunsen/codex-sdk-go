@@ -12,6 +12,7 @@ const (
 	ItemTypeCommandExecution = "command_execution"
 	ItemTypeFileChange       = "file_change"
 	ItemTypeMcpToolCall      = "mcp_tool_call"
+	ItemTypeCollabToolCall   = "collab_tool_call"
 	ItemTypeWebSearch        = "web_search"
 	ItemTypeTodoList         = "todo_list"
 	ItemTypeError            = "error"
@@ -50,6 +51,38 @@ const (
 	McpToolCallInProgress McpToolCallStatus = "in_progress"
 	McpToolCallCompleted  McpToolCallStatus = "completed"
 	McpToolCallFailed     McpToolCallStatus = "failed"
+)
+
+// CollabToolCallStatus is the status of a collab tool call.
+type CollabToolCallStatus string
+
+const (
+	CollabToolCallInProgress CollabToolCallStatus = "in_progress"
+	CollabToolCallCompleted  CollabToolCallStatus = "completed"
+	CollabToolCallFailed     CollabToolCallStatus = "failed"
+)
+
+// CollabTool identifies a collab tool.
+type CollabTool string
+
+const (
+	CollabToolSpawnAgent CollabTool = "spawn_agent"
+	CollabToolSendInput  CollabTool = "send_input"
+	CollabToolWait       CollabTool = "wait"
+	CollabToolCloseAgent CollabTool = "close_agent"
+)
+
+// CollabAgentStatus is the status of a collab agent.
+type CollabAgentStatus string
+
+const (
+	CollabAgentPendingInit CollabAgentStatus = "pending_init"
+	CollabAgentRunning     CollabAgentStatus = "running"
+	CollabAgentInterrupted CollabAgentStatus = "interrupted"
+	CollabAgentCompleted   CollabAgentStatus = "completed"
+	CollabAgentErrored     CollabAgentStatus = "errored"
+	CollabAgentShutdown    CollabAgentStatus = "shutdown"
+	CollabAgentNotFound    CollabAgentStatus = "not_found"
 )
 
 // ThreadItem is implemented by every item that can appear in a thread.
@@ -163,6 +196,34 @@ type McpToolCallItem struct {
 func (i *McpToolCallItem) ItemType() string { return ItemTypeMcpToolCall }
 func (i *McpToolCallItem) ItemID() string   { return i.ID }
 
+// CollabAgentState is the last known state of a collab agent.
+type CollabAgentState struct {
+	Status  CollabAgentStatus `json:"status"`
+	Message *string           `json:"message,omitempty"`
+}
+
+// CollabToolCallItem is a call to a collab tool. It starts when the tool is
+// invoked and completes when the tool reports success or failure.
+type CollabToolCallItem struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	// Tool is the collab tool invoked.
+	Tool CollabTool `json:"tool"`
+	// SenderThreadID is the thread that issued the call.
+	SenderThreadID string `json:"sender_thread_id"`
+	// ReceiverThreadIDs are the threads targeted by the call.
+	ReceiverThreadIDs []string `json:"receiver_thread_ids"`
+	// Prompt is the prompt sent to the agent, if any.
+	Prompt *string `json:"prompt,omitempty"`
+	// AgentsStates maps receiver thread ids to their last known state.
+	AgentsStates map[string]CollabAgentState `json:"agents_states"`
+	// Status is the current status of the call.
+	Status CollabToolCallStatus `json:"status"`
+}
+
+func (i *CollabToolCallItem) ItemType() string { return ItemTypeCollabToolCall }
+func (i *CollabToolCallItem) ItemID() string   { return i.ID }
+
 // WebSearchItem captures a web search request. Completes when results are
 // returned to the agent.
 type WebSearchItem struct {
@@ -236,6 +297,8 @@ func ParseThreadItem(data []byte) (ThreadItem, error) {
 		item = &FileChangeItem{}
 	case ItemTypeMcpToolCall:
 		item = &McpToolCallItem{}
+	case ItemTypeCollabToolCall:
+		item = &CollabToolCallItem{}
 	case ItemTypeWebSearch:
 		item = &WebSearchItem{}
 	case ItemTypeTodoList:

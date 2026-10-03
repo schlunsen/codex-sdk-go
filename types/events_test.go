@@ -73,6 +73,7 @@ func TestParseThreadItemAllTypes(t *testing.T) {
 		{`{"id":"1","type":"command_execution","command":"ls","aggregated_output":"","exit_code":0,"status":"completed"}`, ItemTypeCommandExecution},
 		{`{"id":"1","type":"file_change","changes":[{"path":"a.go","kind":"update"}],"status":"completed"}`, ItemTypeFileChange},
 		{`{"id":"1","type":"mcp_tool_call","server":"s","tool":"t","arguments":{"a":1},"result":{"content":[{"type":"text","text":"ok"}],"structured_content":null},"status":"completed"}`, ItemTypeMcpToolCall},
+		{`{"id":"1","type":"collab_tool_call","tool":"spawn_agent","sender_thread_id":"a","receiver_thread_ids":["b"],"prompt":null,"agents_states":{"b":{"status":"running","message":null}},"status":"in_progress"}`, ItemTypeCollabToolCall},
 		{`{"id":"1","type":"web_search","query":"q"}`, ItemTypeWebSearch},
 		{`{"id":"1","type":"todo_list","items":[]}`, ItemTypeTodoList},
 		{`{"id":"1","type":"error","message":"m"}`, ItemTypeError},
@@ -98,8 +99,16 @@ func TestParseThreadItemAllTypes(t *testing.T) {
 	if mcp.Result == nil || len(mcp.Result.Content) != 1 || string(mcp.Arguments) != `{"a":1}` {
 		t.Errorf("mcp not parsed: %+v", mcp)
 	}
-	item, _ = ParseThreadItem([]byte(cases[8].line))
-	if u := item.(*UnknownItem); string(u.Raw) != cases[8].line {
+	item, _ = ParseThreadItem([]byte(cases[5].line))
+	collab := item.(*CollabToolCallItem)
+	if collab.Tool != CollabToolSpawnAgent || collab.SenderThreadID != "a" ||
+		len(collab.ReceiverThreadIDs) != 1 || collab.ReceiverThreadIDs[0] != "b" ||
+		collab.Prompt != nil || collab.Status != CollabToolCallInProgress ||
+		collab.AgentsStates["b"].Status != CollabAgentRunning || collab.AgentsStates["b"].Message != nil {
+		t.Errorf("collab not parsed: %+v", collab)
+	}
+	item, _ = ParseThreadItem([]byte(cases[len(cases)-1].line))
+	if u := item.(*UnknownItem); string(u.Raw) != cases[len(cases)-1].line {
 		t.Errorf("unknown raw not preserved: %s", u.Raw)
 	}
 }
