@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
+### Added
+- `TurnOptions.CyberAccessProgram` (`standard`, `daybreak_blue`, `daybreak_red`)
+  and `WithCyberAccessProgram`, passed per turn as `--cyber-access-program`.
+  Experimental; mirrors `cyberAccessProgram` in the TypeScript SDK
+  (openai/codex#49939).
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
@@ -68,7 +76,8 @@ Initial release. Feature parity with `@openai/codex-sdk` (TypeScript).
 - Typed errors: `CLINotFoundError`, `ExecError`, `TurnFailedError`,
   `ThreadStreamError`, `ParseError`, `ConfigError`
 
-[Unreleased]: https://github.com/schlunsen/codex-sdk-go/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/schlunsen/codex-sdk-go/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/schlunsen/codex-sdk-go/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/schlunsen/codex-sdk-go/compare/v0.1.0...v0.1.1

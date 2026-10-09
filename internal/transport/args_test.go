@@ -37,10 +37,11 @@ func TestBuildArgsFull(t *testing.T) {
 		types.ConfigObject{"show_raw_agent_reasoning": true},
 		[]string{`raw.key="v"`},
 		RunArgs{
-			BaseURL:          "https://example.test/v1",
-			Thread:           th,
-			OutputSchemaFile: "/tmp/schema.json",
-			Images:           []string{"a.png"},
+			BaseURL:            "https://example.test/v1",
+			Thread:             th,
+			OutputSchemaFile:   "/tmp/schema.json",
+			CyberAccessProgram: types.CyberAccessDaybreakBlue,
+			Images:             []string{"a.png"},
 		},
 	)
 	if err != nil {
@@ -59,6 +60,7 @@ func TestBuildArgsFull(t *testing.T) {
 		"--add-dir", "/b",
 		"--skip-git-repo-check",
 		"--output-schema", "/tmp/schema.json",
+		"--cyber-access-program", "daybreak_blue",
 		"--config", `model_reasoning_effort="high"`,
 		"--config", "sandbox_workspace_write.network_access=true",
 		"--config", `web_search="live"`,

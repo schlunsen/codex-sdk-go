@@ -212,8 +212,21 @@ func (o *ThreadOptions) WithApprovalPolicy(policy ApprovalMode) *ThreadOptions {
 	return o
 }
 
+// CyberAccessProgram selects the Cyber access program for a turn.
+type CyberAccessProgram string
+
+const (
+	CyberAccessStandard     CyberAccessProgram = "standard"
+	CyberAccessDaybreakBlue CyberAccessProgram = "daybreak_blue"
+	CyberAccessDaybreakRed  CyberAccessProgram = "daybreak_red"
+)
+
 // TurnOptions configures a single turn.
 type TurnOptions struct {
+	// CyberAccessProgram is an experimental Cyber selection for this turn with
+	// the built-in OpenAI provider (--cyber-access-program). Leave empty to use
+	// server defaults.
+	CyberAccessProgram CyberAccessProgram
 	// OutputSchema is a JSON schema (as a plain map) describing the expected
 	// agent output. When set, the SDK writes it to a temp file and passes
 	// --output-schema.
@@ -226,6 +239,12 @@ func NewTurnOptions() *TurnOptions { return &TurnOptions{} }
 // WithOutputSchema sets the JSON schema for structured output.
 func (o *TurnOptions) WithOutputSchema(schema map[string]any) *TurnOptions {
 	o.OutputSchema = schema
+	return o
+}
+
+// WithCyberAccessProgram sets the Cyber access program for the turn.
+func (o *TurnOptions) WithCyberAccessProgram(program CyberAccessProgram) *TurnOptions {
+	o.CyberAccessProgram = program
 	return o
 }
 

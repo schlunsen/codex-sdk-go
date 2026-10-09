@@ -16,6 +16,7 @@ its Go equivalent.
 | `{ type: "text", text }` | `types.TextInput(text)` |
 | `{ type: "local_image", path }` | `types.LocalImageInput(path)` |
 | `TurnOptions.outputSchema` | `types.TurnOptions.OutputSchema` (`map[string]any`) |
+| `TurnOptions.cyberAccessProgram` | `types.TurnOptions.CyberAccessProgram` (`types.CyberAccessProgram`) |
 | `TurnOptions.signal` (AbortSignal) | `context.Context` passed to `Run*` |
 | `CodexOptions.codexPathOverride` | `CodexOptions.CodexPathOverride` |
 | `CodexOptions.baseUrl` | `CodexOptions.BaseURL` |

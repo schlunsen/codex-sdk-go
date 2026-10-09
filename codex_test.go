@@ -122,6 +122,62 @@ func TestRunInputsImagesAndSchema(t *testing.T) {
 	}
 }
 
+func TestCyberAccessProgramPerTurn(t *testing.T) {
+	c := newTestClient(t, nil)
+	th := c.StartThread(nil)
+	ctx := context.Background()
+	var args []string
+
+	turn, err := th.Run(ctx, "select blue", types.NewTurnOptions().WithCyberAccessProgram(types.CyberAccessDaybreakBlue))
+	if err != nil {
+		t.Fatal(err)
+	}
+	args = append(args, decodeEcho(t, turn).Args)
+
+	st, err := th.RunStreamed(ctx, "select red", types.NewTurnOptions().WithCyberAccessProgram(types.CyberAccessDaybreakRed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ev := range st.Events() {
+		if done, ok := ev.(*types.ItemCompletedEvent); ok {
+			if msg, ok := done.Item.(*types.AgentMessageItem); ok {
+				args = append(args, decodeEcho(t, &Turn{FinalResponse: msg.Text}).Args)
+			}
+		}
+	}
+	if err := st.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, opts := range []*types.TurnOptions{
+		types.NewTurnOptions().WithCyberAccessProgram(types.CyberAccessStandard),
+		nil,
+	} {
+		turn, err := th.Run(ctx, "go", opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		args = append(args, decodeEcho(t, turn).Args)
+	}
+
+	if len(args) != 4 {
+		t.Fatalf("expected 4 turns, got %d: %q", len(args), args)
+	}
+	for i, want := range []string{"daybreak_blue", "daybreak_red", "standard"} {
+		if !strings.Contains(args[i], "--cyber-access-program "+want) {
+			t.Errorf("turn %d args = %s", i, args[i])
+		}
+	}
+	if strings.Contains(args[3], "--cyber-access-program") {
+		t.Errorf("turn without selection should omit flag: %s", args[3])
+	}
+	for i, a := range args[1:] {
+		if !strings.Contains(a, "resume thread_123") {
+			t.Errorf("turn %d should resume: %s", i+1, a)
+		}
+	}
+}
+
 func TestRunEmptyInput(t *testing.T) {
 	c := newTestClient(t, nil)
 	if _, err := c.StartThread(nil).Run(context.Background(), "", nil); err == nil {
