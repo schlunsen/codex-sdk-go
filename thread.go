@@ -211,13 +211,14 @@ func (t *Thread) RunStreamedInputs(ctx context.Context, inputs []types.UserInput
 	ctx, cancel := context.WithCancel(ctx)
 
 	stream, err := t.exec.Run(ctx, transport.RunArgs{
-		Input:            prompt,
-		ThreadID:         t.ID(),
-		Images:           images,
-		OutputSchemaFile: schemaPath,
-		BaseURL:          t.options.BaseURL,
-		APIKey:           t.options.APIKey,
-		Thread:           t.threadOptions,
+		Input:              prompt,
+		ThreadID:           t.ID(),
+		Images:             images,
+		OutputSchemaFile:   schemaPath,
+		CyberAccessProgram: turnOptions.CyberAccessProgram,
+		BaseURL:            t.options.BaseURL,
+		APIKey:             t.options.APIKey,
+		Thread:             t.threadOptions,
 	})
 	if err != nil {
 		cancel()

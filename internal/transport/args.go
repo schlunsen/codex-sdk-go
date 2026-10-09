@@ -17,6 +17,8 @@ type RunArgs struct {
 	Images []string
 	// OutputSchemaFile is a path to a JSON schema passed via --output-schema.
 	OutputSchemaFile string
+	// CyberAccessProgram is passed via --cyber-access-program.
+	CyberAccessProgram types.CyberAccessProgram
 
 	BaseURL string
 	APIKey  string
@@ -74,6 +76,9 @@ func BuildArgs(cfg types.ConfigObject, rawOverrides []string, args RunArgs) ([]s
 	}
 	if args.OutputSchemaFile != "" {
 		cmd = append(cmd, "--output-schema", args.OutputSchemaFile)
+	}
+	if args.CyberAccessProgram != "" {
+		cmd = append(cmd, "--cyber-access-program", string(args.CyberAccessProgram))
 	}
 	if t.ModelReasoningEffort != "" {
 		cmd = append(cmd, "--config", fmt.Sprintf("model_reasoning_effort=%q", string(t.ModelReasoningEffort)))
